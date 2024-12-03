@@ -1,10 +1,11 @@
 import {serveDir} from '@std/http/file-server'
-import Log from './Log.mts'
+import {ILoggingProxy} from './Types.mts'
 
 export interface IHttpServerOptions {
     name: string
     port: number
-    rootFolders: { [path: string]: string }
+    rootFolders: { [path: string]: string },
+    loggingProxy: ILoggingProxy
 }
 
 export default class HttpServer {
@@ -19,6 +20,7 @@ export default class HttpServer {
     }
 
     private start() {
+        const Log = this._options.loggingProxy
         // Turns out it was important here to not connect to `localhost` but the IP, or else Firefox would get a 2000ms initial lookup delay.
         this._server = Deno.serve(
             {hostname: '127.0.0.1', port: this._options.port},

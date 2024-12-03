@@ -1,11 +1,12 @@
-import Log from './Log.mts'
+import {ILoggingProxy} from './Types.mts'
 
 export interface IWebSocketServerOptions {
     name: string
     port: number
     keepAlive: boolean
     onServerEvent: TWebSocketServerEventCallback
-    onMessageReceived: TWebSocketServerMessageCallback
+    onMessageReceived: TWebSocketServerMessageCallback,
+    loggingProxy: ILoggingProxy
 }
 
 export interface IWebSocketSessions {
@@ -30,6 +31,7 @@ export default class WebSocketServer {
 
     // region Lifecycle
     private async start() {
+        const Log = this._options.loggingProxy
         if (this._server) await this._server.shutdown()
         try {
             this._server = Deno.serve({
@@ -107,6 +109,7 @@ export default class WebSocketServer {
     }
 
     async restart() {
+        const Log = this._options.loggingProxy
         this._shouldShutDown = false
         Log.i(this.TAG, 'Restarting server', {port: this._options.port})
         await this.start()
@@ -114,6 +117,7 @@ export default class WebSocketServer {
     }
 
     async shutdown() {
+        const Log = this._options.loggingProxy
         this._shouldShutDown = true
         Log.i(this.TAG, 'Shutting down server', {port: this._options.port})
         await this._server?.shutdown()
@@ -126,10 +130,11 @@ export default class WebSocketServer {
     private _unreadyStates: number[] = [WebSocket.CONNECTING, WebSocket.CLOSING, WebSocket.CLOSED]
 
     sendMessage(message: string, toSessionId: string, withSubProtocol?: string): boolean {
+        const Log = this._options.loggingProxy
         const session = this._sessions[toSessionId]
         if (
             session && !this._unreadyStates.includes(session.socket.readyState)
-            && (withSubProtocol === undefined || session.subProtocols[0] === withSubProtocol )
+            && (withSubProtocol === undefined || session.subProtocols[0] === withSubProtocol)
         ) {
             session.socket.send(message)
             Log.v(this.TAG, 'Sent message', {toSessionId, message})
@@ -139,6 +144,7 @@ export default class WebSocketServer {
     }
 
     sendMessageToAll(message: string, subProtocol?: string): number {
+        const Log = this._options.loggingProxy
         let sent = 0
         for (const sessionId of Object.keys(this._sessions)) {
             if (this.sendMessage(message, sessionId, subProtocol)) sent++
@@ -148,6 +154,7 @@ export default class WebSocketServer {
     }
 
     sendMessageToOthers(message: string, mySessionId: string, subProtocol?: string): number {
+        const Log = this._options.loggingProxy
         let sent = 0
         for (const sessionId of Object.keys(this._sessions)) {
             if (sessionId != mySessionId) {
@@ -159,6 +166,7 @@ export default class WebSocketServer {
     }
 
     sendMessageToGroup(message: string, toSessionIds: string[], subProtocol?: string): number {
+        const Log = this._options.loggingProxy
         let sent = 0
         for (const sessionId of toSessionIds) {
             if (this.sendMessage(message, sessionId, subProtocol)) sent++
@@ -174,6 +182,7 @@ export default class WebSocketServer {
      * @param reason
      */
     disconnectSession(sessionId: string, code?: number, reason?: string): boolean {
+        const Log = this._options.loggingProxy
         const session = this._sessions[sessionId]
         if (session.socket) {
             session.socket.close(code, reason)
