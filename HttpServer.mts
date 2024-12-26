@@ -28,7 +28,7 @@ export default class HttpServer {
                 const pathName = new URL(request.url).pathname
                 const pair =
                     Object.entries(this._options.rootFolders)
-                        .find(([key, value]) => {
+                        .find(([key, _]) => {
                             return pathName.startsWith(key)
                         })
                 const rootPath = pair && pair.length == 2 ? `${pair[1]}` : ''
