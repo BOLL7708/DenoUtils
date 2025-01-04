@@ -3,6 +3,7 @@ import {ILoggingProxy} from './Types.mts'
 export interface IWebSocketServerOptions {
     name: string
     port: number
+    hostname: string
     keepAlive: boolean
     onServerEvent: TWebSocketServerEventCallback
     onMessageReceived: TWebSocketServerMessageCallback,
@@ -36,6 +37,7 @@ export default class WebSocketServer {
         try {
             this._server = Deno.serve({
                 port: this._options.port,
+                hostname: this._options.hostname,
                 handler: (req) => {
                     let sessionId: string = ''
                     const upgrade = req.headers.get('upgrade')
@@ -129,12 +131,22 @@ export default class WebSocketServer {
     // region Sending
     private _unreadyStates: number[] = [WebSocket.CONNECTING, WebSocket.CLOSING, WebSocket.CLOSED]
 
-    sendMessage(message: string, toSessionId: string, withSubProtocol?: string): boolean {
+    sendMessage(message: string, toSessionId: string, withSubprotocols?: TWebSocketServerSessionSubprotocols): boolean {
         const Log = this._options.loggingProxy
         const session = this._sessions[toSessionId]
+        const checkSubprotocols = ():boolean => {
+            if(withSubprotocols === undefined) return true
+            for(let i=0; i<withSubprotocols.length; i++) {
+                const matchValue = withSubprotocols[i]
+                const sessionValue = session.subProtocols[i]
+                if(matchValue !== undefined && matchValue !== sessionValue) return false
+            }
+            return true
+        }
         if (
-            session && !this._unreadyStates.includes(session.socket.readyState)
-            && (withSubProtocol === undefined || session.subProtocols[0] === withSubProtocol)
+            session
+            && !this._unreadyStates.includes(session.socket.readyState)
+            && checkSubprotocols()
         ) {
             session.socket.send(message)
             Log.v(this.TAG, 'Sent message', {toSessionId, message})
@@ -143,33 +155,33 @@ export default class WebSocketServer {
         return false
     }
 
-    sendMessageToAll(message: string, subProtocol?: string): number {
+    sendMessageToAll(message: string, subProtocols?: TWebSocketServerSessionSubprotocols): number {
         const Log = this._options.loggingProxy
         let sent = 0
         for (const sessionId of Object.keys(this._sessions)) {
-            if (this.sendMessage(message, sessionId, subProtocol)) sent++
+            if (this.sendMessage(message, sessionId, subProtocols)) sent++
         }
         Log.v(this.TAG, 'Message sent to all', {sent, message})
         return sent
     }
 
-    sendMessageToOthers(message: string, mySessionId: string, subProtocol?: string): number {
+    sendMessageToOthers(message: string, mySessionId: string, subProtocols?: TWebSocketServerSessionSubprotocols): number {
         const Log = this._options.loggingProxy
         let sent = 0
         for (const sessionId of Object.keys(this._sessions)) {
             if (sessionId != mySessionId) {
-                if (this.sendMessage(message, sessionId, subProtocol)) sent++
+                if (this.sendMessage(message, sessionId, subProtocols)) sent++
             }
         }
         Log.v(this.TAG, 'Message sent to others', {sent, message, mySessionId})
         return sent
     }
 
-    sendMessageToGroup(message: string, toSessionIds: string[], subProtocol?: string): number {
+    sendMessageToGroup(message: string, toSessionIds: string[], subProtocols?: TWebSocketServerSessionSubprotocols): number {
         const Log = this._options.loggingProxy
         let sent = 0
         for (const sessionId of toSessionIds) {
-            if (this.sendMessage(message, sessionId, subProtocol)) sent++
+            if (this.sendMessage(message, sessionId, subProtocols)) sent++
         }
         Log.v(this.TAG, 'Message sent to group', {sent, message, sessionIds: toSessionIds})
         return sent
@@ -207,6 +219,7 @@ export enum EWebSocketServerState {
 export type TWebSocketServerEventValue = string | number | undefined
 export type TWebSocketServerEventCallback = (state: EWebSocketServerState, value?: TWebSocketServerEventValue, session?: IWebSocketServerSession) => void
 export type TWebSocketServerMessageCallback = (message: string, session: IWebSocketServerSession) => void
+export type TWebSocketServerSessionSubprotocols = (string|undefined)[]
 
 export interface IWebSocketServerSession {
     sessionId: string
