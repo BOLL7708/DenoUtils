@@ -39,22 +39,26 @@ export default class WebSocketServer {
                 port: this._options.port,
                 hostname: this._options.hostname,
                 handler: (req) => {
-                    let sessionId: string = ''
+                    const secWebsocketProtocol = req.headers.get('sec-websocket-protocol') ?? ''
+                    const subprotocols = secWebsocketProtocol
+                        .split(',')
+                        .map(it => it.trim())
+                        .filter(it => it.length)
+
+                    Log.d(this.TAG, 'Client Protocols', subprotocols)
                     const upgrade = req.headers.get('upgrade')
+
                     if (upgrade != 'websocket') {
                         Log.w(this.TAG, 'Connection failed to upgrade', {upgrade})
                         return new Response(null, {status: 501})
                     }
+                    const {socket, response} = Deno.upgradeWebSocket(req, {
+                        protocol: subprotocols[0] // This is required by Chrome (but not Firefox), else it will immediately disconnect with code 1006 and no specified reason.
+                    })
 
-                    const subprotocols = (req.headers.get('sec-websocket-protocol') ?? '')
-                        .split(',')
-                        .map(it => it.trim())
-                        .filter(it => it.length)
-                    Log.d(this.TAG, 'Client Protocols', subprotocols)
-
-                    const {socket, response} = Deno.upgradeWebSocket(req)
                     Log.v(this.TAG, 'Connection was upgraded', {upgrade, subprotocols})
 
+                    let sessionId: string = ''
                     socket.onopen = (open) => {
                         sessionId = crypto.randomUUID()
                         this._sessions[sessionId] = {socket, subprotocols: subprotocols}
@@ -83,7 +87,13 @@ export default class WebSocketServer {
                     }
                     socket.onerror = (error) => {
                         this._options.onServerEvent(EWebSocketServerState.Error, error.type, {sessionId, subprotocols})
-                        Log.e(this.TAG, `Server error`, {sessionId, subprotocols, type: error.type})
+                        Log.e(this.TAG, `Server error`, {
+                            sessionId,
+                            subprotocols,
+                            type: error.type,
+                            message: (error as ErrorEvent).message ?? undefined,
+                            debug: error
+                        })
                     }
                     socket.onmessage = (message) => {
                         this._options.onMessageReceived(message.data, {sessionId, subprotocols: subprotocols})
