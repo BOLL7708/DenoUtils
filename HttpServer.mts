@@ -9,7 +9,7 @@ export interface IHttpServerOptions {
      */
     hostname: string
     rootFolders: IHttpServerRootFolders
-    staticApi: IHttpServerStaticApi
+    simpleApi: IHttpServerStaticApi
     loggingProxy: ILoggingProxy
 }
 
@@ -24,7 +24,7 @@ export interface IHttpServerStaticApi {
 }
 
 export interface IHttpServerStaticApiResponse {
-    [path: string]: any
+    [path: string]: any | (() => any) | ((request: Request) => any)
 }
 
 export default class HttpServer {
@@ -45,16 +45,20 @@ export default class HttpServer {
             { hostname: this._options.hostname, port: this._options.port },
             (request) => {
                 const pathName = new URL(request.url).pathname
+
+                // Handle API endpoints
                 const apiPaths: { [fullPath: string]: string } = Object.fromEntries(
-                    Object.entries(this._options.staticApi.responses).map(
-                        ([path, _value]) => [`/${this._options.staticApi.root}/${path}`, path]
+                    Object.entries(this._options.simpleApi.responses).map(
+                        ([path, _value]) => [`/${this._options.simpleApi.root}/${path}`, path]
                     )
                 )
-                // Handle API endpoints
-                if (pathName.startsWith(`/${this._options.staticApi.root}/`)) {
+                if (pathName.startsWith(`/${this._options.simpleApi.root}/`)) {
                     if (Object.keys(apiPaths).includes(pathName)) {
                         const path = apiPaths[pathName]
-                        const data = this._options.staticApi.responses[path]
+                        let data = this._options.simpleApi.responses[path]
+                        if (typeof data === 'function') {
+                            data = data(request)
+                        }
                         return new Response(JSON.stringify(data), {
                             headers: { 'Content-Type': 'application/json' }
                         })
