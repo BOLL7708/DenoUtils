@@ -52,59 +52,67 @@ export default class WebSocketServer {
                         Log.w(this.TAG, 'Connection failed to upgrade', {upgrade})
                         return new Response(null, {status: 501})
                     }
-                    const {socket, response} = Deno.upgradeWebSocket(req, {
-                        protocol: subprotocols[0] // This is required by Chrome (but not Firefox), else it will immediately disconnect with code 1006 and no specified reason.
-                    })
+                    try {
+                        const {socket, response} = Deno.upgradeWebSocket(req, {
+                            protocol: subprotocols[0] // This is required by Chrome (but not Firefox), else it will immediately disconnect with code 1006 and no specified reason.
+                        })
 
-                    Log.v(this.TAG, 'Connection was upgraded', {upgrade, subprotocols})
+                        Log.v(this.TAG, 'Connection was upgraded', {upgrade, subprotocols})
 
-                    let sessionId: string = ''
-                    socket.onopen = (open) => {
-                        sessionId = crypto.randomUUID()
-                        this._sessions[sessionId] = {socket, subprotocols: subprotocols}
-                        this._options.onServerEvent(EWebSocketServerState.ClientConnected, undefined, {
-                            sessionId,
-                            subprotocols
-                        })
-                        Log.i(this.TAG, 'Client connected, session registered', {
-                            sessionId,
-                            subprotocols,
-                            type: open.type
-                        })
+                        let sessionId: string = ''
+                        socket.onopen = (open) => {
+                            sessionId = crypto.randomUUID()
+                            this._sessions[sessionId] = {socket, subprotocols: subprotocols}
+                            this._options.onServerEvent(EWebSocketServerState.ClientConnected, undefined, {
+                                sessionId,
+                                subprotocols
+                            })
+                            Log.i(this.TAG, 'Client connected, session registered', {
+                                sessionId,
+                                subprotocols,
+                                type: open.type
+                            })
+                        }
+                        socket.onclose = (close) => {
+                            delete this._sessions[sessionId]
+                            this._options.onServerEvent(EWebSocketServerState.ClientDisconnected, undefined, {
+                                sessionId,
+                                subprotocols
+                            })
+                            Log.i(this.TAG, 'Client disconnected, session removed', {
+                                sessionId,
+                                subprotocols,
+                                type: close.type,
+                                code: close.code
+                            })
+                        }
+                        socket.onerror = (error) => {
+                            this._options.onServerEvent(EWebSocketServerState.Error, error.type, {
+                                sessionId,
+                                subprotocols
+                            })
+                            Log.e(this.TAG, `Server error`, {
+                                sessionId,
+                                subprotocols,
+                                type: error.type,
+                                message: (error as ErrorEvent).message ?? undefined,
+                                debug: error
+                            })
+                        }
+                        socket.onmessage = (message) => {
+                            this._options.onMessageReceived(message.data, {sessionId, subprotocols: subprotocols})
+                            Log.v(this.TAG, 'Message received', {
+                                sessionId,
+                                subprotocols,
+                                type: message.type,
+                                message: message.data
+                            })
+                        }
+                        return response
+                    } catch (e: unknown) {
+                        Log.w(this.TAG, 'Connection failed to upgrade', `${e}`)
+                        return new Response(null, {status: 500})
                     }
-                    socket.onclose = (close) => {
-                        delete this._sessions[sessionId]
-                        this._options.onServerEvent(EWebSocketServerState.ClientDisconnected, undefined, {
-                            sessionId,
-                            subprotocols
-                        })
-                        Log.i(this.TAG, 'Client disconnected, session removed', {
-                            sessionId,
-                            subprotocols,
-                            type: close.type,
-                            code: close.code
-                        })
-                    }
-                    socket.onerror = (error) => {
-                        this._options.onServerEvent(EWebSocketServerState.Error, error.type, {sessionId, subprotocols})
-                        Log.e(this.TAG, `Server error`, {
-                            sessionId,
-                            subprotocols,
-                            type: error.type,
-                            message: (error as ErrorEvent).message ?? undefined,
-                            debug: error
-                        })
-                    }
-                    socket.onmessage = (message) => {
-                        this._options.onMessageReceived(message.data, {sessionId, subprotocols: subprotocols})
-                        Log.v(this.TAG, 'Message received', {
-                            sessionId,
-                            subprotocols,
-                            type: message.type,
-                            message: message.data
-                        })
-                    }
-                    return response
                 }
             })
             this._server.finished.then(() => {
@@ -114,7 +122,7 @@ export default class WebSocketServer {
                     if (this._options.keepAlive) this.restart()
                 }
             })
-        } catch (e) {
+        } catch (e: unknown) {
             this._options.onServerEvent(EWebSocketServerState.Error, `${e}`)
             Log.e(this.TAG, 'Unable to start server', {port: this._options.port, error: e})
         }
@@ -144,12 +152,12 @@ export default class WebSocketServer {
     sendMessage(message: string, toSessionId: string, withSubprotocols?: TWebSocketServerSessionSubprotocols): boolean {
         const Log = this._options.loggingProxy
         const session = this._sessions[toSessionId]
-        const checkSubprotocols = ():boolean => {
-            if(withSubprotocols === undefined) return true
-            for(let i=0; i<withSubprotocols.length; i++) {
+        const checkSubprotocols = (): boolean => {
+            if (withSubprotocols === undefined) return true
+            for (let i = 0; i < withSubprotocols.length; i++) {
                 const matchValue = withSubprotocols[i]
                 const sessionValue = session.subprotocols[i]
-                if(matchValue !== undefined && matchValue !== sessionValue) return false
+                if (matchValue !== undefined && matchValue !== sessionValue) return false
             }
             return true
         }
@@ -229,7 +237,7 @@ export enum EWebSocketServerState {
 export type TWebSocketServerEventValue = string | number | undefined
 export type TWebSocketServerEventCallback = (state: EWebSocketServerState, value?: TWebSocketServerEventValue, session?: IWebSocketServerSession) => void
 export type TWebSocketServerMessageCallback = (message: string, session: IWebSocketServerSession) => void
-export type TWebSocketServerSessionSubprotocols = (string|undefined)[]
+export type TWebSocketServerSessionSubprotocols = (string | undefined)[]
 
 export interface IWebSocketServerSession {
     sessionId: string
