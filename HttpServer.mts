@@ -38,12 +38,33 @@ export default class HttpServer {
         this.start()
     }
 
+    applyCorsHeaders(handler: (req: Request) => Response | Promise<Response>) {
+        return async (req: Request): Promise<Response> => {
+            const origin = req.headers.get('Origin') ?? '*' // Use * if no origin present
+            const res = await handler(req)
+            const headers = new Headers(res.headers)
+            headers.set('Access-Control-Allow-Origin', origin)
+            headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+            headers.set('Access-Control-Allow-Credentials', 'true')
+            return new Response(res.body, {
+                status: res.status,
+                statusText: res.statusText,
+                headers
+            })
+        }
+    }
+
     private start() {
         const Log = this._options.loggingProxy
-        //
         this._server = Deno.serve(
             { hostname: this._options.hostname, port: this._options.port },
-            (request) => {
+            this.applyCorsHeaders((request) => {
+                // Preflight response
+                if (request.method === "OPTIONS") {
+                    return new Response(null, { status: 204 });
+                }
+
                 const pathName = new URL(request.url).pathname
 
                 // Handle API endpoints
@@ -74,13 +95,16 @@ export default class HttpServer {
                 const rootPath = pair && pair.length == 2 ? `${pair[1]}` : ''
                 if (rootPath.length) {
                     return serveDir(request, {
-                        fsRoot: rootPath
+                        fsRoot: rootPath,
+                        headers: {}
                     })
                 } else {
                     Log.w(this.TAG, 'Unable to match path to static file store', request.url)
                 }
+
+                // Empty response for unmatched paths
                 return new Response()
-            }
+            })
         )
     }
 
