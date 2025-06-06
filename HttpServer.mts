@@ -96,7 +96,7 @@ export default class HttpServer {
                 if (rootPath.length) {
                     return serveDir(request, {
                         fsRoot: rootPath,
-                        headers: {}
+                        headers: []
                     })
                 } else {
                     Log.w(this.TAG, 'Unable to match path to static file store', request.url)

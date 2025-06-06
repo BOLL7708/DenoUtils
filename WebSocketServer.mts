@@ -217,6 +217,7 @@ export default class WebSocketServer {
         if (session.socket) {
             session.socket.close(code, reason)
             delete this._sessions[sessionId]
+            Log.v(this.TAG, 'Session disconnected', {sessionId, code, reason})
             return true
         }
         return false
