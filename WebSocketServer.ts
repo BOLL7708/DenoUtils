@@ -1,4 +1,4 @@
-import {ILoggingProxy} from './Types.mts'
+import {ILoggingProxy} from './Types.ts'
 
 export interface IWebSocketServerOptions {
     name: string

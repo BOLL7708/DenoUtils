@@ -1,5 +1,5 @@
 import { serveDir } from '@std/http/file-server'
-import { ILoggingProxy } from './Types.mts'
+import { ILoggingProxy } from './Types.ts'
 
 export interface IHttpServerOptions {
     name: string
