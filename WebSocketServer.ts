@@ -18,26 +18,26 @@ export interface IWebSocketSessions {
 }
 
 export default class WebSocketServer {
-    private readonly TAG: string
-    private readonly _options: IWebSocketServerOptions
-    private _server?: Deno.HttpServer
-    private _sessions: IWebSocketSessions = {}
-    private _shouldShutDown: boolean = false
+    readonly #tag: string
+    readonly #options: IWebSocketServerOptions
+    #server?: Deno.HttpServer
+    #sessions: IWebSocketSessions = {}
+    #shouldShutDown: boolean = false
 
     constructor(options: IWebSocketServerOptions) {
-        this._options = options
-        this.TAG = `${this.constructor.name}->${this._options.name}`
-        this.start().then()
+        this.#options = options
+        this.#tag = `${this.constructor.name}->${this.#options.name}`
+        this.#start().then()
     }
 
     // region Lifecycle
-    private async start() {
-        const Log = this._options.loggingProxy
-        if (this._server) await this._server.shutdown()
+    async #start() {
+        const Log = this.#options.loggingProxy
+        if (this.#server) await this.#server.shutdown()
         try {
-            this._server = Deno.serve({
-                port: this._options.port,
-                hostname: this._options.hostname,
+            this.#server = Deno.serve({
+                port: this.#options.port,
+                hostname: this.#options.hostname,
                 handler: (req) => {
                     const secWebsocketProtocol = req.headers.get('sec-websocket-protocol') ?? ''
                     const subprotocols = secWebsocketProtocol
@@ -45,11 +45,11 @@ export default class WebSocketServer {
                         .map(it => it.trim())
                         .filter(it => it.length)
 
-                    Log.d(this.TAG, 'Client Protocols', subprotocols)
+                    Log.d(this.#tag, 'Client Protocols', subprotocols)
                     const upgrade = req.headers.get('upgrade')
 
                     if (upgrade != 'websocket') {
-                        Log.w(this.TAG, 'Connection failed to upgrade', {upgrade})
+                        Log.w(this.#tag, 'Connection failed to upgrade', {upgrade})
                         return new Response(null, {status: 501})
                     }
                     try {
@@ -57,29 +57,29 @@ export default class WebSocketServer {
                             protocol: subprotocols[0] // This is required by Chrome (but not Firefox), else it will immediately disconnect with code 1006 and no specified reason.
                         })
 
-                        Log.v(this.TAG, 'Connection was upgraded', {upgrade, subprotocols})
+                        Log.v(this.#tag, 'Connection was upgraded', {upgrade, subprotocols})
 
                         let sessionId: string = ''
                         socket.onopen = (open) => {
                             sessionId = crypto.randomUUID()
-                            this._sessions[sessionId] = {socket, subprotocols: subprotocols}
-                            this._options.onServerEvent(EWebSocketServerState.ClientConnected, undefined, {
+                            this.#sessions[sessionId] = {socket, subprotocols: subprotocols}
+                            this.#options.onServerEvent(EWebSocketServerState.ClientConnected, undefined, {
                                 sessionId,
                                 subprotocols
                             })
-                            Log.i(this.TAG, 'Client connected, session registered', {
+                            Log.i(this.#tag, 'Client connected, session registered', {
                                 sessionId,
                                 subprotocols,
                                 type: open.type
                             })
                         }
                         socket.onclose = (close) => {
-                            delete this._sessions[sessionId]
-                            this._options.onServerEvent(EWebSocketServerState.ClientDisconnected, undefined, {
+                            delete this.#sessions[sessionId]
+                            this.#options.onServerEvent(EWebSocketServerState.ClientDisconnected, undefined, {
                                 sessionId,
                                 subprotocols
                             })
-                            Log.i(this.TAG, 'Client disconnected, session removed', {
+                            Log.i(this.#tag, 'Client disconnected, session removed', {
                                 sessionId,
                                 subprotocols,
                                 type: close.type,
@@ -87,11 +87,11 @@ export default class WebSocketServer {
                             })
                         }
                         socket.onerror = (error) => {
-                            this._options.onServerEvent(EWebSocketServerState.Error, error.type, {
+                            this.#options.onServerEvent(EWebSocketServerState.Error, error.type, {
                                 sessionId,
                                 subprotocols
                             })
-                            Log.e(this.TAG, `Server error`, {
+                            Log.e(this.#tag, `Server error`, {
                                 sessionId,
                                 subprotocols,
                                 type: error.type,
@@ -100,8 +100,8 @@ export default class WebSocketServer {
                             })
                         }
                         socket.onmessage = (message) => {
-                            this._options.onMessageReceived(message.data, {sessionId, subprotocols: subprotocols})
-                            Log.v(this.TAG, 'Message received', {
+                            this.#options.onMessageReceived(message.data, {sessionId, subprotocols: subprotocols})
+                            Log.v(this.#tag, 'Message received', {
                                 sessionId,
                                 subprotocols,
                                 type: message.type,
@@ -110,48 +110,48 @@ export default class WebSocketServer {
                         }
                         return response
                     } catch (e: unknown) {
-                        Log.w(this.TAG, 'Connection failed to upgrade', `${e}`)
+                        Log.w(this.#tag, 'Connection failed to upgrade', `${e}`)
                         return new Response(null, {status: 500})
                     }
                 }
             })
-            this._server.finished.then(() => {
-                if (!this._shouldShutDown) {
-                    this._options.onServerEvent(EWebSocketServerState.Error, 'Server finished unexpectedly')
-                    Log.w(this.TAG, 'Server finished unexpectedly')
-                    if (this._options.keepAlive) this.restart()
+            this.#server.finished.then(() => {
+                if (!this.#shouldShutDown) {
+                    this.#options.onServerEvent(EWebSocketServerState.Error, 'Server finished unexpectedly')
+                    Log.w(this.#tag, 'Server finished unexpectedly')
+                    if (this.#options.keepAlive) this.restart()
                 }
             })
         } catch (e: unknown) {
-            this._options.onServerEvent(EWebSocketServerState.Error, `${e}`)
-            Log.e(this.TAG, 'Unable to start server', {port: this._options.port, error: e})
+            this.#options.onServerEvent(EWebSocketServerState.Error, `${e}`)
+            Log.e(this.#tag, 'Unable to start server', {port: this.#options.port, error: e})
         }
     }
 
     async restart() {
-        const Log = this._options.loggingProxy
-        this._shouldShutDown = false
-        Log.i(this.TAG, 'Restarting server', {port: this._options.port})
-        await this.start()
-        this._options.onServerEvent(EWebSocketServerState.ServerStarted)
+        const Log = this.#options.loggingProxy
+        this.#shouldShutDown = false
+        Log.i(this.#tag, 'Restarting server', {port: this.#options.port})
+        await this.#start()
+        this.#options.onServerEvent(EWebSocketServerState.ServerStarted)
     }
 
     async shutdown() {
-        const Log = this._options.loggingProxy
-        this._shouldShutDown = true
-        Log.i(this.TAG, 'Shutting down server', {port: this._options.port})
-        await this._server?.shutdown()
-        this._options.onServerEvent(EWebSocketServerState.ServerShutdown)
+        const Log = this.#options.loggingProxy
+        this.#shouldShutDown = true
+        Log.i(this.#tag, 'Shutting down server', {port: this.#options.port})
+        await this.#server?.shutdown()
+        this.#options.onServerEvent(EWebSocketServerState.ServerShutdown)
     }
 
     // endregion
 
     // region Sending
-    private _unreadyStates: number[] = [WebSocket.CONNECTING, WebSocket.CLOSING, WebSocket.CLOSED]
+    #unreadyStates: number[] = [WebSocket.CONNECTING, WebSocket.CLOSING, WebSocket.CLOSED]
 
     sendMessage(message: string, toSessionId: string, withSubprotocols?: TWebSocketServerSessionSubprotocols): boolean {
-        const Log = this._options.loggingProxy
-        const session = this._sessions[toSessionId]
+        const Log = this.#options.loggingProxy
+        const session = this.#sessions[toSessionId]
         const checkSubprotocols = (): boolean => {
             if (withSubprotocols === undefined) return true
             for (let i = 0; i < withSubprotocols.length; i++) {
@@ -163,45 +163,45 @@ export default class WebSocketServer {
         }
         if (
             session
-            && !this._unreadyStates.includes(session.socket.readyState)
+            && !this.#unreadyStates.includes(session.socket.readyState)
             && checkSubprotocols()
         ) {
             session.socket.send(message)
-            Log.v(this.TAG, 'Sent message', {toSessionId, message})
+            Log.v(this.#tag, 'Sent message', {toSessionId, message})
             return true
         }
         return false
     }
 
     sendMessageToAll(message: string, subprotocols?: TWebSocketServerSessionSubprotocols): number {
-        const Log = this._options.loggingProxy
+        const Log = this.#options.loggingProxy
         let sent = 0
-        for (const sessionId of Object.keys(this._sessions)) {
+        for (const sessionId of Object.keys(this.#sessions)) {
             if (this.sendMessage(message, sessionId, subprotocols)) sent++
         }
-        Log.v(this.TAG, 'Message sent to all', {sent, message})
+        Log.v(this.#tag, 'Message sent to all', {sent, message})
         return sent
     }
 
     sendMessageToOthers(message: string, mySessionId: string, subprotocols?: TWebSocketServerSessionSubprotocols): number {
-        const Log = this._options.loggingProxy
+        const Log = this.#options.loggingProxy
         let sent = 0
-        for (const sessionId of Object.keys(this._sessions)) {
+        for (const sessionId of Object.keys(this.#sessions)) {
             if (sessionId != mySessionId) {
                 if (this.sendMessage(message, sessionId, subprotocols)) sent++
             }
         }
-        Log.v(this.TAG, 'Message sent to others', {sent, message, mySessionId})
+        Log.v(this.#tag, 'Message sent to others', {sent, message, mySessionId})
         return sent
     }
 
     sendMessageToGroup(message: string, toSessionIds: string[], subprotocols?: TWebSocketServerSessionSubprotocols): number {
-        const Log = this._options.loggingProxy
+        const Log = this.#options.loggingProxy
         let sent = 0
         for (const sessionId of toSessionIds) {
             if (this.sendMessage(message, sessionId, subprotocols)) sent++
         }
-        Log.v(this.TAG, 'Message sent to group', {sent, message, sessionIds: toSessionIds})
+        Log.v(this.#tag, 'Message sent to group', {sent, message, sessionIds: toSessionIds})
         return sent
     }
 
@@ -212,12 +212,12 @@ export default class WebSocketServer {
      * @param reason
      */
     disconnectSession(sessionId: string, code?: number, reason?: string): boolean {
-        const Log = this._options.loggingProxy
-        const session = this._sessions[sessionId]
+        const Log = this.#options.loggingProxy
+        const session = this.#sessions[sessionId]
         if (session.socket) {
             session.socket.close(code, reason)
-            delete this._sessions[sessionId]
-            Log.v(this.TAG, 'Session disconnected', {sessionId, code, reason})
+            delete this.#sessions[sessionId]
+            Log.v(this.#tag, 'Session disconnected', {sessionId, code, reason})
             return true
         }
         return false

@@ -28,14 +28,14 @@ export interface IHttpServerStaticApiResponse {
 }
 
 export default class HttpServer {
-    private readonly TAG: string
-    private readonly _options: IHttpServerOptions
-    private _server?: Deno.HttpServer
+    readonly #tag: string
+    readonly #options: IHttpServerOptions
+    #server?: Deno.HttpServer
 
     constructor(options: IHttpServerOptions) {
-        this._options = options
-        this.TAG = `${this.constructor.name}->${this._options.name}`
-        this.start()
+        this.#options = options
+        this.#tag = `${this.constructor.name}->${this.#options.name}`
+        this.#start()
     }
 
     applyCorsHeaders(handler: (req: Request) => Response | Promise<Response>) {
@@ -55,10 +55,10 @@ export default class HttpServer {
         }
     }
 
-    private start() {
-        const Log = this._options.loggingProxy
-        this._server = Deno.serve(
-            { hostname: this._options.hostname, port: this._options.port },
+    #start() {
+        const Log = this.#options.loggingProxy
+        this.#server = Deno.serve(
+            { hostname: this.#options.hostname, port: this.#options.port },
             this.applyCorsHeaders((request) => {
                 // Preflight response
                 if (request.method === "OPTIONS") {
@@ -69,14 +69,14 @@ export default class HttpServer {
 
                 // Handle API endpoints
                 const apiPaths: { [fullPath: string]: string } = Object.fromEntries(
-                    Object.entries(this._options.simpleApi.responses).map(
-                        ([path, _value]) => [`/${this._options.simpleApi.root}/${path}`, path]
+                    Object.entries(this.#options.simpleApi.responses).map(
+                        ([path, _value]) => [`/${this.#options.simpleApi.root}/${path}`, path]
                     )
                 )
-                if (pathName.startsWith(`/${this._options.simpleApi.root}/`)) {
+                if (pathName.startsWith(`/${this.#options.simpleApi.root}/`)) {
                     if (Object.keys(apiPaths).includes(pathName)) {
                         const path = apiPaths[pathName]
-                        let data = this._options.simpleApi.responses[path]
+                        let data = this.#options.simpleApi.responses[path]
                         if (typeof data === 'function') {
                             data = data(request)
                         }
@@ -88,7 +88,7 @@ export default class HttpServer {
                 }
 
                 // Handle static files
-                const pair = Object.entries(this._options.rootFolders)
+                const pair = Object.entries(this.#options.rootFolders)
                     .find(([key, _]) => {
                         return pathName.startsWith(key)
                     })
@@ -99,7 +99,7 @@ export default class HttpServer {
                         headers: []
                     })
                 } else {
-                    Log.w(this.TAG, 'Unable to match path to static file store', request.url)
+                    Log.w(this.#tag, 'Unable to match path to static file store', request.url)
                 }
 
                 // Empty response for unmatched paths
@@ -108,7 +108,7 @@ export default class HttpServer {
         )
     }
 
-    public async stop() {
-        await this._server?.shutdown()
+    async stop() {
+        await this.#server?.shutdown()
     }
 }
