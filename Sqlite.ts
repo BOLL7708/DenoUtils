@@ -1,5 +1,4 @@
 import {Database} from 'jsr:@db/sqlite'
-import {IDictionary} from '../SharedUtils/Dictionary.ts'
 import {ILoggingProxy} from './Types.ts'
 
 export interface ISqliteOptions {
@@ -10,7 +9,7 @@ export interface ISqliteOptions {
     /** The filename the databased should be stored with. */
     filename: string
     /** Table name : SQL queries to create said table and possible indices and triggers. */
-    structure: IDictionary<string[]>
+    structure: Record<string, string[]>
     /** The logging proxy object that allows optional import of the SharedUtils Log class. */
     loggingProxy: ILoggingProxy
 }
@@ -20,7 +19,7 @@ export type TDatabaseQueryInput = null | undefined | number | bigint | string | 
 
 export interface IDatabaseQuery {
     query: string
-    params?: IDictionary<TDatabaseQueryInput>
+    params?: Record<string, TDatabaseQueryInput>
 }
 
 export default class Sqlite {
@@ -163,7 +162,7 @@ export default class Sqlite {
         }
     }
 
-    queryDictionary<T>(options: IDatabaseQuery): IDictionary<T> | undefined {
+    queryDictionary<T>(options: IDatabaseQuery): Record<string, T> | undefined {
         const Log = this.#options.loggingProxy
         try {
             const dic = this.#db.prepare(options.query).all(options.params)
