@@ -12,6 +12,8 @@ export interface ISqliteOptions {
     structure: Record<string, string[]>
     /** The logging proxy object that allows optional import of the SharedUtils Log class. */
     loggingProxy: ILoggingProxy
+    /** Open the database in read only mode. */
+    readOnly?: boolean
 }
 
 
@@ -32,15 +34,16 @@ export default class Sqlite {
         this.#tag = `${this.constructor.name}->${this.#options.name}`
         Deno.mkdirSync(options.directory, {recursive: true})
         this.#dbPath = `${options.directory}/${options.filename}`
-        this.#db = this.#create(this.#dbPath)
+        this.#db = this.#create(this.#dbPath, this.#options.readOnly)
     }
 
     // region Lifecycle
-    #create(filePath: string): Database {
+    #create(filePath: string, readOnly: boolean = false): Database {
         const Log = this.#options.loggingProxy
         const db = new Database(filePath, {
             int64: true,
-            unsafeConcurrency: true
+            unsafeConcurrency: true,
+            readonly: readOnly
         })
         if (db.open) {
             const version = db.prepare('select sqlite_version()').value<[string]>()
